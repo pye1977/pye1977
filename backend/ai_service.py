@@ -107,9 +107,34 @@ async def generate_deal_memo(spv: dict[str, Any]) -> dict[str, Any]:
         f"Already raised USD: {spv.get('raised_amount')}\n"
         "Generate the Deal Memo now."
     )
-    chat = _client("memo-" + str(uuid.uuid4()), system)
-    raw = await chat.send_message(UserMessage(text=text))
-    return {"memo": raw}
+    try:
+        chat = _client("memo-" + str(uuid.uuid4()), system)
+        raw = await chat.send_message(UserMessage(text=text))
+        return {"memo": raw}
+    except Exception as exc:
+        # Fallback memo built from SPV data when LLM is unavailable
+        budget = spv.get("total_budget") or 0
+        raised = spv.get("raised_amount") or 0
+        pct = (raised / budget * 100.0) if budget else 0.0
+        memo = (
+            f"## Deal Memo — {spv.get('name', 'Untitled SPV')}\n\n"
+            f"_AI generation temporarily unavailable; auto-drafted from structured SPV data._\n\n"
+            "## Production Overview\n"
+            f"- Type: **{spv.get('type', 'n/a').replace('_', ' ')}**\n"
+            f"- Genre: **{spv.get('genre', 'n/a')}**\n"
+            f"- Episodes: **{spv.get('episode_count') or 'n/a'}**\n"
+            f"- Primary territory: **{spv.get('territory', 'n/a')}**\n\n"
+            "## Capital Structure\n"
+            f"- Total production budget: **${budget:,.0f}**\n"
+            f"- Capital raised to date: **${raised:,.0f}** ({pct:.1f}% of stack)\n"
+            f"- Minimum investor ticket: **${spv.get('minimum_investment', 0):,.0f}**\n"
+            f"- Target IRR: **{spv.get('target_irr', 0):.1f}%**\n\n"
+            "## Recommendation\n"
+            "_Refer to the SPV detail page for the live cap table, rights ledger, and "
+            "waterfall configuration._\n\n"
+            f"> Fallback reason: `{type(exc).__name__}`"
+        )
+        return {"memo": memo, "fallback": True}
 
 
 async def score_greenlight(spv: dict[str, Any], market_signal: dict[str, Any]) -> dict[str, Any]:

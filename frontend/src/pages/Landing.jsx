@@ -59,7 +59,7 @@ const MODULES = [
 const STATS = [
   { num: "60s", label: "Vertical micro-content episode" },
   { num: "8 tiers", label: "Average configured revenue waterfall" },
-  { num: "$0.49", label: "Median micropayment unlock" },
+  { num: "$0.99", label: "Median micropayment unlock" },
   { num: "4.2x", label: "Faster cross-border settlement" },
 ];
 
@@ -132,7 +132,7 @@ export default function Landing() {
                     ["cap_table_entry_added", "Lead Investor +18%"],
                     ["right_minted", "EU · streaming · 7y"],
                     ["waterfall_executed", "$214,800 distributed"],
-                    ["episode_unlocked", "$0.49 · micropay"],
+                    ["episode_unlocked", "$0.99 · micropay"],
                   ].map(([type, body]) => (
                     <div key={type} className="flex items-start gap-3">
                       <span className="rv-bronze">●</span>

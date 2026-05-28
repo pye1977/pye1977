@@ -126,6 +126,12 @@ async def unlock_episode(
             )
         return {"free": True, "url": None}
 
+    if 0 < ep.get("unlock_price_usd", 0) < 0.5:
+        raise HTTPException(
+            status_code=400,
+            detail="Minimum unlock price is $0.50 (Stripe constraint)",
+        )
+
     origin = payload.origin_url.rstrip("/")
     host_url = str(http_request.base_url).rstrip("/")
     stripe = _stripe(host_url)

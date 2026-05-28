@@ -310,7 +310,7 @@ async def seed_demo_data() -> None:
                 "episode_number": i,
                 "title": f"Episode {i}",
                 "duration_seconds": 85,
-                "unlock_price_usd": 0.49 if i > 1 else 0.0,
+                "unlock_price_usd": 0.99 if i > 1 else 0.0,
                 "thumbnail_url": "",
                 "description": "A vertical-format romance chapter.",
                 "unlock_count": 0,

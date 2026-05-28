@@ -1,53 +1,116 @@
-import { useEffect } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import axios from "axios";
+import { Toaster } from "sonner";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
-const API = `${BACKEND_URL}/api`;
+import { AuthProvider } from "@/lib/auth";
+import Navbar from "@/components/Navbar";
+import ProtectedRoute from "@/components/ProtectedRoute";
 
-const Home = () => {
-  const helloWorldApi = async () => {
-    try {
-      const response = await axios.get(`${API}/`);
-      console.log(response.data.message);
-    } catch (e) {
-      console.error(e, `errored out requesting / api`);
-    }
-  };
-
-  useEffect(() => {
-    helloWorldApi();
-  }, []);
-
-  return (
-    <div>
-      <header className="App-header">
-        <a
-          className="App-link"
-          href="https://emergent.sh"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="https://avatars.githubusercontent.com/in/1201222?s=120&u=2686cf91179bbafbc7a71bfbc43004cf9ae1acea&v=4" />
-        </a>
-        <p className="mt-5">Building something incredible ~!</p>
-      </header>
-    </div>
-  );
-};
+import Landing from "@/pages/Landing";
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
+import Dashboard from "@/pages/Dashboard";
+import ProducerDashboard from "@/pages/ProducerDashboard";
+import InvestorDashboard from "@/pages/InvestorDashboard";
+import DistributorDashboard from "@/pages/DistributorDashboard";
+import AdminDashboard from "@/pages/AdminDashboard";
+import SPVDetail from "@/pages/SPVDetail";
+import ContentLibrary from "@/pages/ContentLibrary";
+import SupplyChain from "@/pages/SupplyChain";
+import AuditTrail from "@/pages/AuditTrail";
+import PaymentReturn from "@/pages/PaymentReturn";
 
 function App() {
   return (
-    <div className="App">
+    <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Home />}>
-            <Route index element={<Home />} />
-          </Route>
-        </Routes>
+        <div className="App min-h-screen">
+          <Navbar />
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/library" element={<ContentLibrary />} />
+            <Route path="/payment/return" element={<PaymentReturn />} />
+
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <Dashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/producer"
+              element={
+                <ProtectedRoute roles={["producer"]}>
+                  <ProducerDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/investor"
+              element={
+                <ProtectedRoute roles={["investor"]}>
+                  <InvestorDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/distributor"
+              element={
+                <ProtectedRoute roles={["distributor"]}>
+                  <DistributorDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin"
+              element={
+                <ProtectedRoute roles={["admin"]}>
+                  <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/spv/:spvId"
+              element={
+                <ProtectedRoute>
+                  <SPVDetail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/audit"
+              element={
+                <ProtectedRoute>
+                  <AuditTrail />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/supply-chain"
+              element={
+                <ProtectedRoute>
+                  <SupplyChain />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </div>
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            style: {
+              background: "#121214",
+              color: "#fff",
+              border: "1px solid rgba(255,255,255,0.1)",
+            },
+          }}
+        />
       </BrowserRouter>
-    </div>
+    </AuthProvider>
   );
 }
 

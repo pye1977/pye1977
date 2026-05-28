@@ -1,0 +1,54 @@
+{
+  "summary": "Backend regression on RIVITED Solutions — 28/30 pytest tests passed (93.3%). All auth (admin/producer/investor/distributor login, register, me, logout, role enforcement, cookie issuance), SPV CRUD + filters + patch, cap-table CRUD, waterfall add+execute+payouts, rights chain-of-title (parent_hash linking), audit /events + /stats, investor checkout (Stripe test mode) including below-minimum and not-open rejections, /investments/mine aggregation, episode CRUD + free unlock + filters, vendor list + AI risk scoring, audit demo seed (Saturn Falls/Neon Mahal/Black Lacquer + ~4 rights for Saturn Falls + 10 episodes + 4 vendors) all PASS. AI endpoints budget-forecast, greenlight, rights-conflict PASS with real Claude Sonnet 4.5 calls.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/episodes/unlock (paid episodes)",
+        "issue": "Returns 500 when episode unlock_price_usd is below Stripe minimum ($0.50). Seed data in seed.py sets unlock_price_usd to $0.49 for some episodes which Stripe rejects with 'Checkout Session's total amount due must add up to at least $0.50 usd'. Root cause: seed.py:313 hard-codes $0.49 below Stripe minimum; route_content.py has no validation/handling for amounts < $0.50.",
+        "priority": "HIGH"
+      },
+      {
+        "endpoint": "POST /api/ai/deal-memo",
+        "issue": "Returns 500 when Emergent LLM budget is exhausted ('Budget has been exceeded! Current cost: 0.006426, Max budget: 0.001'). Root cause: ai_service.generate_deal_memo() has NO try/except — any ChatError leaks as 500. Other AI helpers (forecast_budget, score_vendor_risk) have fallbacks. Other AI endpoints (greenlight, rights-conflict, budget-forecast) worked during same run, so this is partly transient quota + missing error handling.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix seed.py episode prices: change $0.49 to >= $0.50 (e.g., $0.99 or $0.50) to comply with Stripe minimum charge.",
+    "Add a server-side guard in routes_content.unlock_episode: if 0 < unlock_price_usd < 0.50, return 400 with clear message OR round up to $0.50.",
+    "Wrap generate_deal_memo in ai_service.py with try/except returning a markdown fallback memo similar to forecast_budget/score_vendor_risk fallbacks, so transient EMERGENT_LLM_KEY budget/quota errors don't 500.",
+    "Optionally translate ChatError -> HTTPException(503) at the FastAPI route layer for cleaner client UX."
+  ],
+  "critical_code_review_comments": [
+    "ai_service.generate_deal_memo (lines 89-112) lacks try/except whereas peer functions have fallbacks — inconsistent error handling pattern.",
+    "routes_finance.py duplicates Stripe minimum logic absence (also $0.50) — investment checkout already enforces SPV-level minimum, but episode unlocks rely solely on seed data being correct.",
+    "Date-time fields are stored as ISO strings in some collections (spvs, cap_table, waterfall_tiers, rights, episodes) but as datetime objects elsewhere — mixed serialization could complicate range queries.",
+    "Audit/blockchain.append_event is called in many routes without try/except — if MongoDB hiccups during chain write, the originating operation still 200s but chain integrity could break. Consider transactional write or surfacing failure.",
+    "JWT_SECRET read via os.environ[...] inside _jwt_secret() each call (good for hot reload), but no min-length guard — production deployments should validate."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (created)",
+    "/app/backend/tests/__init__.py (created)"
+  ],
+  "success_rate": {
+    "backend": "93%",
+    "frontend": "not tested"
+  },
+  "test_credentials": "Admin: admin@rivited.io/rivited2026, Producer: producer@rivited.io/demo1234, Investor: investor@rivited.io/demo1234, Distributor: distributor@rivited.io/demo1234 — all verified working.",
+  "seed_data_creation": "Tests created TEST_-prefixed SPVs/episodes/vendors/cap-table entries/rights — left in DB intentionally for downstream verification. No production seed data modified.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest suite at /app/backend/tests/backend_test.py covers 30 cases across health, auth, spvs, cap table, waterfall, rights chain-of-title, audit, investments (Stripe test mode), episodes (free + paid), vendors (with AI risk scoring), and 4 AI endpoints (budget-forecast, deal-memo, greenlight, rights-conflict). Two known failing endpoints: (1) POST /api/episodes/unlock for $0.49 episodes — Stripe rejects amounts <$0.50; (2) POST /api/ai/deal-memo when EMERGENT_LLM_KEY budget exceeded — missing fallback in ai_service.generate_deal_memo. After main agent fixes both, rerun: pytest /app/backend/tests/backend_test.py -v --tb=short --junitxml=/app/test_reports/pytest/pytest_results.xml. AI calls take 5-30s each; total suite runs ~100s.",
+  "rca of the issue": "Issue 1 (paid episode unlock 500): seed.py line 313 sets unlock_price_usd=0.49 for episodes 2+ of the second series. Stripe Checkout enforces minimum $0.50 USD per session. routes_content.unlock_episode() forwards the price directly without bounds-checking, causing emergentintegrations.payments.stripe.checkout.CheckoutError -> unhandled 500. Mitigation: bump seed price to $0.99 (matches first series) OR add guard `if 0 < ep['unlock_price_usd'] < 0.5: raise HTTPException(400, 'Minimum unlock price is $0.50')`. Reproduction: login as investor, list episodes, attempt unlock on any seeded $0.49 episode -> 500. Issue 2 (deal-memo 500): EMERGENT_LLM_KEY hit per-session budget limit ('Max budget: 0.001'). generate_deal_memo() has no try/except so litellm.BadRequestError propagates as 500. Mitigation: wrap LLM call in try/except returning a Markdown fallback memo. Reproduction: when LLM budget is near exhausted (or after many AI calls in a single session), call POST /api/ai/deal-memo -> 500."
+}

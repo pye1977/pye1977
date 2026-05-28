@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
-import { Sparkles, Plus, Play, ShieldCheck, Hash, Trash2 } from "lucide-react";
+import { Sparkles, Plus, Play, ShieldCheck, Hash, Trash2, CalendarDays, Globe2 } from "lucide-react";
 import { toast } from "sonner";
-import { api, extractError, fmtUsd, fmtPct, shortHash } from "@/lib/api";
+import { api, extractError, fmtUsd, fmtPct, fmtUsdCents, shortHash } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import ConfirmModal from "@/components/ConfirmModal";
+import useAuditStream from "@/hooks/useAuditStream";
 
 const STAKEHOLDER_TYPES = [
   "producer",
@@ -45,7 +47,7 @@ function Section({ title, eyebrow, right, children, testId }) {
   );
 }
 
-function CapTablePanel({ spv, isOwner, onAudit }) {
+function CapTablePanel({ spv, isOwner, onAudit, setConfirm }) {
   const [entries, setEntries] = useState([]);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -94,8 +96,28 @@ function CapTablePanel({ spv, isOwner, onAudit }) {
   };
 
   const remove = async (id) => {
+    // Two-step HITL: 1st request returns a confirmation token; we surface
+    // it via the parent's confirm modal. Producer must then confirm.
     try {
-      await api.delete(`/spvs/${spv.id}/cap-table/${id}`);
+      const { data } = await api.delete(`/spvs/${spv.id}/cap-table/${id}`);
+      if (data?.confirmation_token) {
+        return data; // caller decides what to do
+      }
+      toast.success("Entry removed");
+      load();
+      onAudit?.();
+      return null;
+    } catch (err) {
+      toast.error(extractError(err));
+      return null;
+    }
+  };
+
+  const removeConfirmed = async (id, token) => {
+    try {
+      await api.delete(`/spvs/${spv.id}/cap-table/${id}`, {
+        params: { confirmation_token: token },
+      });
       toast.success("Entry removed");
       load();
       onAudit?.();
@@ -213,7 +235,27 @@ function CapTablePanel({ spv, isOwner, onAudit }) {
               {isOwner ? (
                 <td className="text-right">
                   <button
-                    onClick={() => remove(e.id)}
+                    onClick={async () => {
+                      const result = await remove(e.id);
+                      if (result?.confirmation_token) {
+                        setConfirm({
+                          open: true,
+                          title: "Remove cap-table entry",
+                          description: `This will remove ${e.stakeholder_name} from the cap table.`,
+                          warning: result.extra?.warning,
+                          destructive: true,
+                          meta: [
+                            { label: "Equity", value: fmtPct(e.equity_percentage, 2) },
+                            { label: "Capital", value: fmtUsd(e.investment_amount) },
+                          ],
+                          confirmLabel: "Remove stakeholder",
+                          onConfirm: async () => {
+                            await removeConfirmed(e.id, result.confirmation_token);
+                            setConfirm({ open: false });
+                          },
+                        });
+                      }
+                    }}
                     className="text-zinc-500 hover:text-red-400"
                     data-testid={`cap-delete-btn-${e.id}`}
                   >
@@ -236,7 +278,7 @@ function CapTablePanel({ spv, isOwner, onAudit }) {
   );
 }
 
-function WaterfallPanel({ spv, isOwner, onAudit }) {
+function WaterfallPanel({ spv, isOwner, onAudit, setConfirm }) {
   const [tiers, setTiers] = useState([]);
   const [payouts, setPayouts] = useState([]);
   const [open, setOpen] = useState(false);
@@ -296,16 +338,57 @@ function WaterfallPanel({ spv, isOwner, onAudit }) {
     e.preventDefault();
     setBusy(true);
     try {
-      const { data } = await api.post(`/spvs/${spv.id}/waterfall/execute`, {
+      // Step 1: backend returns a signed confirmation token + impact summary
+      const first = await api.post(`/spvs/${spv.id}/waterfall/execute`, {
         revenue_amount: Number(revenue),
         revenue_source: "distribution",
       });
-      toast.success(
-        `Distributed ${fmtUsd(data.total_distributed)} across the waterfall`
-      );
-      setExec(false);
-      await load();
-      onAudit?.();
+      const token = first.data?.confirmation_token;
+      const extra = first.data?.extra || {};
+      if (!token) {
+        // Already executed (shouldn't happen but guard)
+        toast.success("Waterfall executed");
+        setExec(false);
+        await load();
+        onAudit?.();
+        return;
+      }
+      // Step 2: surface a HITL modal — main agent confirms, we re-call with token
+      setConfirm({
+        open: true,
+        title: "Execute revenue waterfall",
+        description:
+          "This will distribute the revenue across the configured tiers and emit an immutable audit event. Each stakeholder's payout will be visible in the audit trail.",
+        warning: extra.warning,
+        meta: [
+          { label: "Revenue", value: fmtUsd(extra.revenue_amount || Number(revenue)) },
+          { label: "Tiers", value: String(extra.tier_count || 0) },
+          { label: "Stakeholders", value: String(extra.stakeholder_count || 0) },
+        ],
+        confirmLabel: "Execute now",
+        onConfirm: async () => {
+          try {
+            const { data } = await api.post(
+              `/spvs/${spv.id}/waterfall/execute`,
+              {
+                revenue_amount: Number(revenue),
+                revenue_source: "distribution",
+              },
+              { params: { confirmation_token: token } }
+            );
+            toast.success(
+              `Distributed ${fmtUsd(data.total_distributed)} across the waterfall`
+            );
+            setExec(false);
+            await load();
+            onAudit?.();
+          } catch (err) {
+            toast.error(extractError(err));
+          } finally {
+            setConfirm({ open: false });
+          }
+        },
+      });
     } catch (err) {
       toast.error(extractError(err));
     } finally {
@@ -698,8 +781,434 @@ function RightsPanel({ spv, isOwner, onAudit }) {
   );
 }
 
+function MilestonesPanel({ spv, isOwner, onAudit }) {
+  const [items, setItems] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    target_date: "",
+    revenue_threshold_usd: 0,
+    trigger_payout_usd: 0,
+  });
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    const { data } = await api.get(`/spvs/${spv.id}/milestones`);
+    setItems(data);
+  }, [spv.id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api.post(`/spvs/${spv.id}/milestones`, {
+        ...form,
+        revenue_threshold_usd: Number(form.revenue_threshold_usd),
+        trigger_payout_usd: Number(form.trigger_payout_usd),
+      });
+      toast.success("Milestone added");
+      setOpen(false);
+      setForm({
+        name: "",
+        description: "",
+        target_date: "",
+        revenue_threshold_usd: 0,
+        trigger_payout_usd: 0,
+      });
+      await load();
+      onAudit?.();
+    } catch (err) {
+      toast.error(extractError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const markReached = async (id) => {
+    try {
+      await api.post(`/milestones/${id}/mark-reached`);
+      toast.success("Milestone triggered");
+      await load();
+      onAudit?.();
+    } catch (err) {
+      toast.error(extractError(err));
+    }
+  };
+
+  return (
+    <Section
+      title="Residuals Timeline & Milestones"
+      eyebrow="Auto-trigger payouts"
+      testId="spv-milestones-section"
+      right={
+        isOwner ? (
+          <button
+            onClick={() => setOpen((o) => !o)}
+            className="rv-btn-ghost text-xs flex items-center gap-1"
+            data-testid="milestone-add-btn"
+          >
+            <Plus size={12} /> Milestone
+          </button>
+        ) : null
+      }
+    >
+      {open ? (
+        <form className="grid grid-cols-2 gap-3 mb-5" onSubmit={submit}>
+          <input
+            className="rv-input col-span-2"
+            placeholder="Milestone name (e.g. Episode 10 launch)"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            required
+            data-testid="milestone-name-input"
+          />
+          <input
+            type="date"
+            className="rv-input"
+            value={form.target_date}
+            onChange={(e) => setForm({ ...form, target_date: e.target.value })}
+            required
+            data-testid="milestone-date-input"
+          />
+          <input
+            type="number"
+            min={0}
+            className="rv-input"
+            placeholder="Trigger payout $ (optional)"
+            value={form.trigger_payout_usd}
+            onChange={(e) =>
+              setForm({ ...form, trigger_payout_usd: e.target.value })
+            }
+            data-testid="milestone-payout-input"
+          />
+          <input
+            className="rv-input col-span-2"
+            placeholder="Description"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+            data-testid="milestone-description-input"
+          />
+          <button
+            className="rv-btn-primary col-span-2"
+            disabled={busy}
+            data-testid="milestone-submit-btn"
+          >
+            {busy ? "Saving…" : "Add to timeline"}
+          </button>
+        </form>
+      ) : null}
+
+      {items.length === 0 ? (
+        <p className="text-sm text-zinc-500">
+          No milestones set yet. Add release dates or revenue thresholds to
+          schedule automatic residuals payouts.
+        </p>
+      ) : (
+        <ol className="relative border-l border-white/10 pl-6 space-y-5">
+          {items.map((m) => (
+            <li key={m.id} className="relative" data-testid={`milestone-row-${m.id}`}>
+              <span
+                className={`absolute -left-[27px] top-1 w-3 h-3 rounded-full border-2 border-[var(--rv-bg)] ${
+                  m.status === "triggered"
+                    ? "rv-bg-bronze"
+                    : "bg-zinc-700"
+                }`}
+              />
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <CalendarDays size={12} className="text-zinc-500" />
+                    <span className="text-xs rv-mono text-zinc-400">
+                      {m.target_date}
+                    </span>
+                    <span className="rv-chip">{m.status}</span>
+                  </div>
+                  <p className="rv-heading text-base mt-1">{m.name}</p>
+                  {m.description ? (
+                    <p className="text-xs text-zinc-500 mt-1">{m.description}</p>
+                  ) : null}
+                </div>
+                <div className="text-right">
+                  {m.trigger_payout_usd > 0 ? (
+                    <div className="rv-bronze rv-mono text-sm">
+                      {fmtUsd(m.trigger_payout_usd)}
+                    </div>
+                  ) : null}
+                  {isOwner && m.status === "pending" ? (
+                    <button
+                      onClick={() => markReached(m.id)}
+                      className="rv-btn-ghost text-xs mt-2"
+                      data-testid={`milestone-mark-btn-${m.id}`}
+                    >
+                      Mark reached
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </Section>
+  );
+}
+
+function PayoutRailsPanel({ spv, isOwner, onAudit }) {
+  const [rails, setRails] = useState(null);
+  const [simulation, setSimulation] = useState(null);
+  const [simAmount, setSimAmount] = useState(100000);
+  const [edit, setEdit] = useState(false);
+  const [form, setForm] = useState({});
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    const { data } = await api.get(`/spvs/${spv.id}/rails`);
+    setRails(data);
+    setForm(data);
+  }, [spv.id]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const save = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api.put(`/spvs/${spv.id}/rails`, {
+        base_currency: form.base_currency,
+        fx_target_currency: form.fx_target_currency,
+        fx_rate: Number(form.fx_rate),
+        tax_withholding_pct: Number(form.tax_withholding_pct),
+        union_obligation_pct: Number(form.union_obligation_pct),
+        settlement_partner: form.settlement_partner,
+        stablecoin_rail_enabled: Boolean(form.stablecoin_rail_enabled),
+      });
+      toast.success("Rails configuration updated");
+      setEdit(false);
+      await load();
+      onAudit?.();
+    } catch (err) {
+      toast.error(extractError(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const simulate = async () => {
+    try {
+      const { data } = await api.post(
+        `/spvs/${spv.id}/rails/simulate`,
+        null,
+        { params: { amount_usd: Number(simAmount) } }
+      );
+      setSimulation(data);
+    } catch (err) {
+      toast.error(extractError(err));
+    }
+  };
+
+  if (!rails) return null;
+
+  return (
+    <Section
+      title="Cross-Border Payout Rails"
+      eyebrow="FX · Tax · Union · Stablecoin"
+      testId="spv-rails-section"
+      right={
+        isOwner ? (
+          <button
+            onClick={() => setEdit((o) => !o)}
+            className="rv-btn-ghost text-xs flex items-center gap-1"
+            data-testid="rails-edit-toggle-btn"
+          >
+            <Globe2 size={12} /> Configure
+          </button>
+        ) : null
+      }
+    >
+      {edit ? (
+        <form onSubmit={save} className="grid grid-cols-2 gap-3 mb-5">
+          <input
+            className="rv-input"
+            value={form.base_currency || "USD"}
+            onChange={(e) =>
+              setForm({ ...form, base_currency: e.target.value.toUpperCase() })
+            }
+            placeholder="Base CCY"
+            maxLength={3}
+            data-testid="rails-base-input"
+          />
+          <input
+            className="rv-input"
+            value={form.fx_target_currency || "USD"}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                fx_target_currency: e.target.value.toUpperCase(),
+              })
+            }
+            placeholder="Target CCY"
+            maxLength={3}
+            data-testid="rails-target-input"
+          />
+          <input
+            type="number"
+            step="0.0001"
+            className="rv-input"
+            value={form.fx_rate || 1}
+            onChange={(e) => setForm({ ...form, fx_rate: e.target.value })}
+            placeholder="FX rate"
+            data-testid="rails-rate-input"
+          />
+          <input
+            className="rv-input"
+            value={form.settlement_partner || ""}
+            onChange={(e) =>
+              setForm({ ...form, settlement_partner: e.target.value })
+            }
+            placeholder="Settlement partner"
+            data-testid="rails-partner-input"
+          />
+          <input
+            type="number"
+            min={0}
+            max={60}
+            step="0.1"
+            className="rv-input"
+            value={form.tax_withholding_pct || 0}
+            onChange={(e) =>
+              setForm({ ...form, tax_withholding_pct: e.target.value })
+            }
+            placeholder="Tax withholding %"
+            data-testid="rails-tax-input"
+          />
+          <input
+            type="number"
+            min={0}
+            max={40}
+            step="0.1"
+            className="rv-input"
+            value={form.union_obligation_pct || 0}
+            onChange={(e) =>
+              setForm({ ...form, union_obligation_pct: e.target.value })
+            }
+            placeholder="Union obligation %"
+            data-testid="rails-union-input"
+          />
+          <label className="col-span-2 flex items-center gap-2 text-xs text-zinc-300">
+            <input
+              type="checkbox"
+              checked={!!form.stablecoin_rail_enabled}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  stablecoin_rail_enabled: e.target.checked,
+                })
+              }
+              data-testid="rails-stablecoin-checkbox"
+            />
+            Stablecoin payout rail enabled
+          </label>
+          <button
+            className="rv-btn-primary col-span-2"
+            disabled={busy}
+            data-testid="rails-save-btn"
+          >
+            {busy ? "Saving…" : "Save rails"}
+          </button>
+        </form>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-3 text-xs rv-mono">
+        <div>
+          <div className="text-zinc-500 uppercase tracking-[0.12em]">FX route</div>
+          <div className="text-white">
+            {rails.base_currency} → {rails.fx_target_currency} @{" "}
+            <span className="rv-bronze">{rails.fx_rate}</span>
+          </div>
+        </div>
+        <div>
+          <div className="text-zinc-500 uppercase tracking-[0.12em]">
+            Partner
+          </div>
+          <div className="text-white">{rails.settlement_partner}</div>
+        </div>
+        <div>
+          <div className="text-zinc-500 uppercase tracking-[0.12em]">
+            Tax withholding
+          </div>
+          <div className="rv-bronze">{fmtPct(rails.tax_withholding_pct, 1)}</div>
+        </div>
+        <div>
+          <div className="text-zinc-500 uppercase tracking-[0.12em]">
+            Union obligation
+          </div>
+          <div className="rv-bronze">{fmtPct(rails.union_obligation_pct, 1)}</div>
+        </div>
+        <div className="col-span-2">
+          <div className="text-zinc-500 uppercase tracking-[0.12em]">Stablecoin rail</div>
+          <div className="text-white">
+            {rails.stablecoin_rail_enabled ? "Enabled" : "Disabled"}
+          </div>
+        </div>
+      </div>
+
+      <div className="border-t border-white/10 mt-5 pt-5">
+        <p className="text-[10px] rv-mono uppercase tracking-[0.18em] text-zinc-500">
+          Simulate gross-to-net for a payout
+        </p>
+        <div className="flex gap-2 mt-3">
+          <input
+            type="number"
+            min={1}
+            className="rv-input"
+            value={simAmount}
+            onChange={(e) => setSimAmount(e.target.value)}
+            placeholder="Gross USD"
+            data-testid="rails-sim-amount-input"
+          />
+          <button
+            onClick={simulate}
+            className="rv-btn-primary text-xs whitespace-nowrap"
+            data-testid="rails-sim-run-btn"
+          >
+            Run simulation
+          </button>
+        </div>
+        {simulation ? (
+          <div className="mt-4 grid grid-cols-2 gap-3 text-xs rv-mono">
+            <div>
+              <div className="text-zinc-500">Gross ({simulation.fx_target_currency})</div>
+              <div className="text-white">{fmtUsdCents(simulation.gross_in_target)}</div>
+            </div>
+            <div>
+              <div className="text-zinc-500">Net payable</div>
+              <div className="rv-bronze">{fmtUsdCents(simulation.net_payable)}</div>
+            </div>
+            <div>
+              <div className="text-zinc-500">Tax withheld</div>
+              <div className="text-white">{fmtUsdCents(simulation.tax_withheld)}</div>
+            </div>
+            <div>
+              <div className="text-zinc-500">Union due</div>
+              <div className="text-white">{fmtUsdCents(simulation.union_due)}</div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </Section>
+  );
+}
+
 function AuditPanel({ spvId }) {
   const [events, setEvents] = useState([]);
+  const live = useAuditStream(50);
 
   const load = useCallback(async () => {
     const { data } = await api.get("/audit/events", {
@@ -711,6 +1220,14 @@ function AuditPanel({ spvId }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Merge live events for this SPV into the head of the list
+  const merged = useMemo(() => {
+    const liveForSpv = live.filter((e) => e.spv_id === spvId);
+    const known = new Set(events.map((e) => e.block_number));
+    const fresh = liveForSpv.filter((e) => !known.has(e.block_number));
+    return [...fresh, ...events];
+  }, [events, live, spvId]);
 
   return (
     <Section
@@ -728,11 +1245,11 @@ function AuditPanel({ spvId }) {
       }
     >
       <div className="space-y-2">
-        {events.map((ev) => (
+        {merged.map((ev) => (
           <div
-            key={ev.id}
+            key={`${ev.block_number}-${ev.block_hash}`}
             className="flex items-start justify-between border-b border-white/5 pb-2 text-xs rv-mono"
-            data-testid={`audit-row-${ev.id}`}
+            data-testid={`audit-row-${ev.id || ev.block_number}`}
           >
             <div>
               <div className="text-white">
@@ -748,7 +1265,7 @@ function AuditPanel({ spvId }) {
             </div>
           </div>
         ))}
-        {events.length === 0 ? (
+        {merged.length === 0 ? (
           <p className="text-xs text-zinc-500">No events for this SPV yet.</p>
         ) : null}
       </div>
@@ -761,6 +1278,7 @@ export default function SPVDetail() {
   const { user } = useAuth();
   const [spv, setSpv] = useState(null);
   const [auditTick, setAuditTick] = useState(0);
+  const [confirm, setConfirm] = useState({ open: false });
 
   useEffect(() => {
     (async () => {

@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
-import { LogOut, User } from "lucide-react";
+import { LogOut, Settings as SettingsIcon, User } from "lucide-react";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -25,15 +25,18 @@ export default function Navbar() {
 
         <nav className="hidden md:flex items-center gap-7 text-sm text-zinc-400">
           <Link to="/library" className="hover:text-white transition" data-testid="nav-library">
-            Content Library
+            Library
           </Link>
           {user && user.id ? (
             <>
               <Link to="/dashboard" className="hover:text-white transition" data-testid="nav-dashboard">
                 Dashboard
               </Link>
+              <Link to="/marketplace" className="hover:text-white transition" data-testid="nav-marketplace">
+                Marketplace
+              </Link>
               <Link to="/audit" className="hover:text-white transition" data-testid="nav-audit">
-                Audit Trail
+                Audit
               </Link>
               <Link to="/supply-chain" className="hover:text-white transition" data-testid="nav-supply-chain">
                 Supply Chain
@@ -46,10 +49,31 @@ export default function Navbar() {
           {user && user.id ? (
             <>
               <div className="hidden sm:flex items-center gap-2 text-sm text-zinc-300">
-                <User size={14} className="text-zinc-500" />
+                {user.picture ? (
+                  <img
+                    src={user.picture}
+                    alt={user.name}
+                    className="w-6 h-6 rounded-full border border-white/10"
+                    data-testid="navbar-user-avatar"
+                  />
+                ) : (
+                  <User size={14} className="text-zinc-500" />
+                )}
                 <span data-testid="navbar-user-email">{user.email}</span>
                 <span className="rv-chip">{user.role}</span>
+                {user.mfa_enabled ? (
+                  <span className="rv-chip" data-testid="navbar-mfa-badge">
+                    <span className="rv-dot rv-bg-bronze" /> MFA
+                  </span>
+                ) : null}
               </div>
+              <Link
+                to="/settings"
+                className="rv-btn-ghost text-sm flex items-center gap-2"
+                data-testid="navbar-settings-btn"
+              >
+                <SettingsIcon size={14} />
+              </Link>
               <button
                 onClick={handleLogout}
                 className="rv-btn-ghost text-sm flex items-center gap-2"

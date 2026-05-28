@@ -1,8 +1,10 @@
 """Simulated blockchain audit trail for RIVITED Solutions.
 
 Each event is appended as a 'block' linked by SHA256(prev_hash + payload + ts).
-This provides immutable-style audit trails without a real chain.
+On every append we also fan-out to any connected WebSocket subscribers so
+clients can render live audit-trail updates.
 """
+import asyncio
 import hashlib
 import json
 from datetime import datetime, timezone
@@ -50,4 +52,13 @@ async def append_event(
     }
     await db.audit_events.insert_one(dict(event))
     event.pop("_id", None)
+
+    # Best-effort broadcast (don't fail the call if WS layer not ready)
+    try:
+        from ws import broadcaster  # late import avoids circular at module load
+
+        asyncio.create_task(broadcaster.broadcast({"channel": "audit", "event": event}))
+    except Exception:
+        pass
+
     return event

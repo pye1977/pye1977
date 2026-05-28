@@ -49,3 +49,8 @@ async def ensure_indexes() -> None:
     await db.audit_events.create_index("spv_id")
     await db.payment_transactions.create_index("session_id", unique=True)
     await db.waterfall_payouts.create_index("spv_id")
+    await db.marketplace_listings.create_index("spv_id")
+    await db.marketplace_listings.create_index("seller_user_id")
+    await db.marketplace_listings.create_index("status")
+    await db.milestones.create_index("spv_id")
+    await db.payout_rails.create_index("spv_id", unique=True)

@@ -23,6 +23,11 @@ from models import (
     WaterfallTier,
     WaterfallTierCreate,
 )
+from security import (
+    issue_confirmation_token,
+    sanitize_text,
+    verify_confirmation_token,
+)
 
 router = APIRouter(prefix="/api", tags=["finance"])
 
@@ -42,15 +47,15 @@ async def create_spv(
     db = get_db()
     spv = SPV(
         name=payload.name,
-        description=payload.description,
+        description=sanitize_text(payload.description, max_len=2000),
         type=payload.type,
         producer_id=user["id"],
         producer_name=user["name"],
-        territory=payload.territory,
+        territory=sanitize_text(payload.territory, max_len=120),
         total_budget=payload.total_budget,
         minimum_investment=payload.minimum_investment,
         target_irr=payload.target_irr,
-        genre=payload.genre,
+        genre=sanitize_text(payload.genre, max_len=80),
         episode_count=payload.episode_count,
     )
     doc = spv.model_dump()
@@ -185,7 +190,10 @@ async def list_cap_table(spv_id: str, user=Depends(get_current_user)):
 
 @router.delete("/spvs/{spv_id}/cap-table/{entry_id}")
 async def delete_cap_table_entry(
-    spv_id: str, entry_id: str, user=Depends(get_current_user)
+    spv_id: str,
+    entry_id: str,
+    confirmation_token: str | None = None,
+    user=Depends(get_current_user),
 ):
     db = get_db()
     spv = await db.spvs.find_one({"id": spv_id})
@@ -193,9 +201,37 @@ async def delete_cap_table_entry(
         raise HTTPException(status_code=404, detail="SPV not found")
     if spv["producer_id"] != user["id"] and user["role"] != "admin":
         raise HTTPException(status_code=403, detail="Only producer can edit cap table")
-    res = await db.cap_table.delete_one({"id": entry_id, "spv_id": spv_id})
-    if res.deleted_count == 0:
+    entry = await db.cap_table.find_one({"id": entry_id, "spv_id": spv_id})
+    if not entry:
         raise HTTPException(status_code=404, detail="Entry not found")
+
+    # Human-in-the-loop: 2-step delete. First call returns a confirmation token
+    # describing the impact; client re-submits with the token to actually delete.
+    if not confirmation_token:
+        return issue_confirmation_token(
+            user_id=user["id"],
+            action="cap_table.delete",
+            resource_id=entry_id,
+            extra={
+                "spv_name": spv["name"],
+                "stakeholder_name": entry["stakeholder_name"],
+                "equity_percentage": entry["equity_percentage"],
+                "investment_amount": entry.get("investment_amount", 0.0),
+                "warning": (
+                    f"This will permanently remove {entry['stakeholder_name']} "
+                    f"({entry['equity_percentage']}% equity) from the cap table. "
+                    "All future waterfall payouts will skip this stakeholder."
+                ),
+            },
+        )
+    try:
+        verify_confirmation_token(
+            confirmation_token, user["id"], "cap_table.delete", entry_id
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    await db.cap_table.delete_one({"id": entry_id, "spv_id": spv_id})
     await append_event(
         "cap_table_entry_removed",
         {"spv_id": spv_id, "entry_id": entry_id},
@@ -431,6 +467,10 @@ async def get_payment_status(session_id: str, http_request: Request):
         await _finalize_investment(db, session_id, txn["metadata"])
     elif status_resp.payment_status == "paid" and txn["purpose"] == "episode_unlock":
         await _finalize_episode_unlock(db, session_id, txn["metadata"])
+    elif status_resp.payment_status == "paid" and txn["purpose"] == "marketplace_buy":
+        from routes_marketplace import finalize_marketplace_buy
+
+        await finalize_marketplace_buy(db, session_id, txn["metadata"])
     return txn
 
 
@@ -530,6 +570,10 @@ async def stripe_webhook(request: Request):
                 await _finalize_investment(db, webhook.session_id, txn["metadata"])
             elif txn["purpose"] == "episode_unlock":
                 await _finalize_episode_unlock(db, webhook.session_id, txn["metadata"])
+            elif txn["purpose"] == "marketplace_buy":
+                from routes_marketplace import finalize_marketplace_buy
+
+                await finalize_marketplace_buy(db, webhook.session_id, txn["metadata"])
     return {"ok": True}
 
 

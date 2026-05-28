@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
-from fastapi import FastAPI  # noqa: E402
+from fastapi import FastAPI, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from auth import router as auth_router, seed_admin  # noqa: E402
@@ -17,8 +17,12 @@ from database import close_db, ensure_indexes  # noqa: E402
 from routes_ai import router as ai_router  # noqa: E402
 from routes_content import router as content_router  # noqa: E402
 from routes_finance import router as finance_router  # noqa: E402
+from routes_marketplace import router as marketplace_router  # noqa: E402
+from routes_milestones import router as milestones_router  # noqa: E402
+from routes_rails import router as rails_router  # noqa: E402
 from routes_rights import router as rights_router  # noqa: E402
 from seed import seed_demo_data  # noqa: E402
+from ws import router as ws_router  # noqa: E402
 
 
 logging.basicConfig(
@@ -40,10 +44,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="RIVITED Solutions API", lifespan=lifespan)
 
-# CORS — supports cookies via httpOnly + samesite=none on prod
 _frontend = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 _origins = [_frontend, "http://localhost:3000", "http://localhost:3001"]
-# Also allow comma-separated CORS_ORIGINS override
 _extra = os.environ.get("CORS_ORIGINS", "")
 if _extra and _extra != "*":
     _origins.extend([o.strip() for o in _extra.split(",") if o.strip()])
@@ -54,6 +56,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# -------- Security headers (defense-in-depth) --------
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = (
+        "geolocation=(), microphone=(), camera=(), payment=()"
+    )
+    return response
 
 
 @app.get("/api/health")
@@ -74,3 +89,7 @@ app.include_router(finance_router)
 app.include_router(rights_router)
 app.include_router(content_router)
 app.include_router(ai_router)
+app.include_router(marketplace_router)
+app.include_router(milestones_router)
+app.include_router(rails_router)
+app.include_router(ws_router)

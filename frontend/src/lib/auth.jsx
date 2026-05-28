@@ -19,11 +19,27 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    // If we're in the OAuth callback hash, let AuthCallback exchange the session
+    if (window.location.hash?.includes("session_id=")) {
+      setUser(null);
+      return;
+    }
     refresh();
   }, [refresh]);
 
+  /**
+   * Returns the resolved user OR an object with `mfa_required: true, mfa_token`
+   * for the caller to drive the second-factor UI.
+   */
   const login = async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
+    if (data.mfa_required) return data;
+    setUser(data.user);
+    return data.user;
+  };
+
+  const verifyMfa = async (mfa_token, code) => {
+    const { data } = await api.post("/auth/mfa/verify", { mfa_token, code });
     setUser(data.user);
     return data.user;
   };
@@ -44,7 +60,9 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, setUser, login, register, logout, refresh }}>
+    <AuthContext.Provider
+      value={{ user, setUser, login, verifyMfa, register, logout, refresh }}
+    >
       {children}
     </AuthContext.Provider>
   );

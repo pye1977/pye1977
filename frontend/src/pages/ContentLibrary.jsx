@@ -3,14 +3,20 @@ import { Lock, Play, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { api, extractError, fmtUsdCents } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import VideoPlayerModal from "@/components/VideoPlayerModal";
 
-function VideoCard({ ep, onUnlock, unlocking }) {
+function VideoCard({ ep, onUnlock, unlocking, onPlay }) {
   return (
     <div
       className="rv-card overflow-hidden flex flex-col"
       data-testid={`episode-card-${ep.id}`}
     >
-      <div className="aspect-[9/16] bg-gradient-to-b from-[#1a1a1d] via-[#0f0f10] to-[#0a0a0b] relative">
+      <div
+        className={`aspect-[9/16] bg-gradient-to-b from-[#1a1a1d] via-[#0f0f10] to-[#0a0a0b] relative ${
+          ep.unlocked ? "cursor-pointer" : ""
+        }`}
+        onClick={() => ep.unlocked && onPlay(ep)}
+      >
         <div className="absolute inset-0 flex items-center justify-center">
           {ep.unlocked ? (
             <div
@@ -45,7 +51,13 @@ function VideoCard({ ep, onUnlock, unlocking }) {
             {ep.unlock_count} unlocks
           </span>
           {ep.unlocked ? (
-            <span className="text-xs rv-bronze rv-mono">Owned</span>
+            <button
+              onClick={() => onPlay(ep)}
+              className="rv-btn-ghost text-xs"
+              data-testid={`episode-play-btn-${ep.id}`}
+            >
+              Play
+            </button>
           ) : ep.unlock_price_usd === 0 ? (
             <button
               onClick={() => onUnlock(ep)}
@@ -76,6 +88,7 @@ export default function ContentLibrary() {
   const [episodes, setEpisodes] = useState([]);
   const [unlocking, setUnlocking] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [playing, setPlaying] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -157,6 +170,7 @@ export default function ContentLibrary() {
                     ep={ep}
                     onUnlock={unlock}
                     unlocking={unlocking}
+                    onPlay={setPlaying}
                   />
                 ))}
               </div>
@@ -164,6 +178,10 @@ export default function ContentLibrary() {
           ))
         )}
       </div>
+
+      {playing ? (
+        <VideoPlayerModal episode={playing} onClose={() => setPlaying(null)} />
+      ) : null}
     </div>
   );
 }

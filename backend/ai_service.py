@@ -3,6 +3,7 @@
 Provides: budget forecasting, deal memo generation, greenlight scoring,
 rights conflict resolution, supply chain risk scoring.
 """
+import asyncio
 import json
 import os
 import re
@@ -12,6 +13,7 @@ from typing import Any
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
+LLM_TIMEOUT_S = 45.0  # stay under ingress 60s budget so fallbacks surface
 
 
 def _client(session_id: str, system: str) -> LlmChat:
@@ -109,9 +111,11 @@ async def generate_deal_memo(spv: dict[str, Any]) -> dict[str, Any]:
     )
     try:
         chat = _client("memo-" + str(uuid.uuid4()), system)
-        raw = await chat.send_message(UserMessage(text=text))
+        raw = await asyncio.wait_for(
+            chat.send_message(UserMessage(text=text)), timeout=LLM_TIMEOUT_S
+        )
         return {"memo": raw}
-    except Exception as exc:
+    except (Exception, asyncio.CancelledError) as exc:
         # Fallback memo built from SPV data when LLM is unavailable
         budget = spv.get("total_budget") or 0
         raised = spv.get("raised_amount") or 0

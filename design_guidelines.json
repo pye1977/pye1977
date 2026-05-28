@@ -1,0 +1,106 @@
+{
+  "theme": "dark",
+  "archetype": "5",
+  "archetype_name": "Luxury & High-Contrast (Cinematic B2B Fintech)",
+  "colors": {
+    "background": {
+      "base": "#0A0A0B",
+      "surface": "#121214",
+      "surface_elevated": "#1A1A1D"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#A1A1AA",
+      "muted": "#71717A"
+    },
+    "brand": {
+      "primary": "#D4AF37",
+      "primary_hover": "#F1C40F",
+      "accent": "#F5F5F5",
+      "destructive": "#991B1B"
+    },
+    "borders": {
+      "default": "rgba(255, 255, 255, 0.1)",
+      "active": "rgba(212, 175, 55, 0.5)"
+    }
+  },
+  "typography": {
+    "headings": {
+      "family": "Cabinet Grotesk, sans-serif",
+      "weights": ["400", "700", "800"],
+      "tracking": "tracking-tight"
+    },
+    "body": {
+      "family": "Manrope, sans-serif",
+      "weights": ["400", "500", "600"]
+    },
+    "mono": {
+      "family": "JetBrains Mono, monospace",
+      "usage": "Data tables, smart contracts, ledgers, audit trails"
+    }
+  },
+  "layout_and_spacing": {
+    "marketing": "Asymmetric, The Swiss Grid, overlapping elements. Generous padding: p-12, p-24, p-32.",
+    "dashboard": "Bento Grid (Control Room Mode). Dense data structures. Use grid-cols-4 or grid-cols-12 for complex layouts. Tight padding: p-4, p-6."
+  },
+  "components": {
+    "buttons": "Flat solid or ghost. No heavy gradients. 1px border for secondary. Primary button is Cinematic Bronze with black text.",
+    "cards": "Flat background, 1px subtle border, no shadow. Hover: border color lightens. DO NOT use Shadcn Card heavily for marketing; use purely custom divs.",
+    "inputs": "Dark background inputs, 1px white/10 border. Focus state: white/30 border ring.",
+    "navigation": "Crystal Glassmorphism: backdrop-blur-xl bg-black/60 with 1px bottom border border-white/10.",
+    "data_tables": "Cardless design. Flush to container edges. 1px bottom borders for rows. JetBrains Mono for figures."
+  },
+  "motion": {
+    "marketing": "Lenis smooth scroll. Framer motion reveal on scroll. Slow organic marquee for investor logos.",
+    "dashboards": "Minimalist micro-interactions. Fast state changes. Hover highlights. No heavy page transitions."
+  },
+  "media": {
+    "hero_background": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/6ee13779-e2af-4a02-8741-92a684902527/images/6ed3117b5364c13b31078b20d79ea934c55192f644d9b7be7dda827574bca446.png",
+      "description": "Abstract cinematic financial data visualization for main landing page hero"
+    },
+    "producer_dashboard_bg": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/6ee13779-e2af-4a02-8741-92a684902527/images/616487ed49dff8b2f51107621d6e54c07d19941b90c951c6db909160ee25bc7e.png",
+      "description": "High-end cinema camera lens reflecting data - use for Producer Dashboard or Features section"
+    },
+    "investor_dashboard_bg": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/6ee13779-e2af-4a02-8741-92a684902527/images/4df7f807c529209750f31c5235d1493c174620fd0d24ec907b1b0a54aafa4fb0.png",
+      "description": "Monumental Web3 ledger representation - use for Investor Dashboard or Rights Ledger section"
+    },
+    "film_production_set": [
+      "https://images.unsplash.com/photo-1576280314550-773c50583407?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNDR8MHwxfHNlYXJjaHwyfHxmaWxtJTIwcHJvZHVjdGlvbiUyMHNldCUyMGRhcmt8ZW58MHx8fHwxNzc5OTUxNTI5fDA&ixlib=rb-4.1.0&q=85",
+      "https://images.unsplash.com/photo-1632187981988-40f3cbaeef5e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNDR8MHwxfHNlYXJjaHwzfHxmaWxtJTIwcHJvZHVjdGlvbiUyMHNldCUyMGRhcmt8ZW58MHx8fHwxNzc5OTUxNTI5fDA&ixlib=rb-4.1.0&q=85",
+      "https://images.unsplash.com/photo-1612544409025-e1f6a56c1152?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNDR8MHwxfHNlYXJjaHwxfHxmaWxtJTIwcHJvZHVjdGlvbiUyMHNldCUyMGRhcmt8ZW58MHx8fHwxNzc5OTUxNTI5fDA&ixlib=rb-4.1.0&q=85"
+    ],
+    "financial_data_charts": [
+      "https://images.unsplash.com/photo-1689732888407-310424e3a372?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwzfHxmaW5hbmNpYWwlMjBkYXRhJTIwY2hhcnRzJTIwZGFya3xlbnwwfHx8fDE3Nzk5NTE1Mjl8MA&ixlib=rb-4.1.0&q=85",
+      "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwyfHxmaW5hbmNpYWwlMjBkYXRhJTIwY2hhcnRzJTIwZGFya3xlbnwwfHx8fDE3Nzk5NTE1Mjl8MA&ixlib=rb-4.1.0&q=85",
+      "https://images.unsplash.com/photo-1745509267699-1b1db256601e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NzR8MHwxfHNlYXJjaHwxfHxmaWxtJTIwcHJvZHVjdGlvbiUyMHNldCUyMGRhcmt8ZW58MHx8fHwxNzc5OTUxNTI5fDA&ixlib=rb-4.1.0&q=85"
+    ],
+    "partner_logos": [
+      "https://images.unsplash.com/photo-1654277041218-84424c78f0ae?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzF8MHwxfHNlYXJjaHwzfHxjb21wYW55JTIwbG9nbyUyMG1pbmltYWwlMjB3aGl0ZXxlbnwwfHx8fDE3Nzk5NTE1Mjl8MA&ixlib=rb-4.1.0&q=85",
+      "https://images.unsplash.com/photo-1763705857736-2b4f16a33758?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2NzF8MHwxfHNlYXJjaHwyfHxjb21wYW55JTIwbG9nbyUyMG1pbmltYWwlMjB3aGl0ZXxlbnwwfHx8fDE3Nzk5NTE1Mjl8MA&ixlib=rb-4.1.0&q=85",
+      "https://images.pexels.com/photos/9949424/pexels-photo-9949424.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    ]
+  },
+  "specific_sections": {
+    "marketing_hero": "Use hero_background with black/40 overlay. H1 text-6xl+ tracking-tight in Cabinet Grotesk. CTA button Cinematic Bronze. Use 'Tracing Beam' or subtle 'Glassmorphism' for a floating intro card.",
+    "producer_dashboard": "Control room grid. High density. Minimal margins. JetBrains mono for Cap Tables and SPVs. Use Shadcn tables but customize to be cardless.",
+    "investor_dashboard": "Use investor_dashboard_bg as a very subtle faded background or header art. Emphasize ROI with charts (Recharts) using Bronze and White lines on deep dark backgrounds. No teal/green for positive numbers, use Signal White or Gold.",
+    "rights_management": "Simulate ledger entries using monospace font. Left align data. Strict column widths.",
+    "supply_chain_intelligence": "Use Recharts or React Force Graph 3D for vendor mapping. Data nodes should glow in Gold and White.",
+    "admin_panel": "Standard dense table layouts. Functional, 1px white/10 borders."
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the dark theme and Archetype 5 (Luxury/Cinematic).",
+    "DO NOT use Inter, Space Grotesk, or Roboto fonts.",
+    "Ensure all interactive elements have data-testid attributes.",
+    "Use Phosphor icons or Lucide icons for UI elements.",
+    "Never use purple or teal. If data visualization needs positive/negative, use Gold/White vs Muted Crimson.",
+    "Do not use generic placeholder image URLs. Use the exact URLs provided in this JSON.",
+    "Implement Lenis for smooth scrolling on the landing page.",
+    "Use framer-motion for page transitions and micro-interactions.",
+    "All components must use standard Tailwind CSS classes matching these colors.",
+    "For UI files, the project uses .js/.jsx, so do not generate .tsx files."
+  ]
+}
